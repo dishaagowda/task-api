@@ -126,3 +126,51 @@ content-type: application/json
 
 **Database screenshot:**
 ![Postgres data](postgres-screenshot.png)
+
+## Authentication (Supabase Auth)
+
+Adds secure user authentication on top of the existing Task API — sign up, log in, log out — and protects specific routes using Supabase-issued JWTs.
+
+**Setup — environment variables:**
+
+Copy `.env.example` to `.env` and fill in your own Supabase project values:
+
+cp .env.example .env
+
+
+You'll need a free Supabase project (supabase.com) — grab your Project URL and anon/publishable key from Project Settings → API.
+
+**Run it:**
+
+uvicorn main:app --reload
+
+
+**Endpoints:**
+
+| Method | Path | Auth required | Description |
+|--------|------|----------------|-------------|
+| POST | /auth/signup | No | Create a new user account |
+| POST | /auth/login | No | Log in, returns access + refresh token |
+| POST | /auth/logout | Yes | End the current session |
+| GET | /public/info | No | Public, unprotected data |
+| GET | /protected/profile | Yes | Read the logged-in user's profile |
+| GET | /protected/dashboard | Yes | Second protected route, same auth middleware |
+
+**Example — signup:**
+
+curl -i -X POST http://localhost:8000/auth/signup -H "Content-Type: application/json" -d '{"email":"test@example.com","password":"password123"}'
+
+
+**Example — accessing a protected route:**
+
+curl -i http://localhost:8000/protected/profile -H "Authorization: Bearer <your_access_token>"
+
+
+A missing or invalid token returns `401 Unauthorized`. A tampered token is rejected the same way — verified live against Supabase on every request.
+
+**Swagger UI:**
+
+Visit `http://localhost:8000/docs`, click the green **Authorize** button, paste your access token, and use "Try it out" directly on any protected route.
+
+![Swagger UI with bearer auth](swagger-auth-screenshot.png)
+
