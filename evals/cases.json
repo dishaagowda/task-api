@@ -1,0 +1,10 @@
+[
+  {"text": "I was charged twice this month, please refund the extra charge", "expected_category": "billing"},
+  {"text": "The app crashes every time I try to upload a photo", "expected_category": "bug"},
+  {"text": "It would be great if you added dark mode to the app", "expected_category": "feature"},
+  {"text": "My subscription payment failed and I don't know why", "expected_category": "billing"},
+  {"text": "The login page shows a blank screen on Safari", "expected_category": "bug"},
+  {"text": "Can you add an export to CSV option for reports?", "expected_category": "feature"},
+  {"text": "hey there", "expected_category": "other"},
+  {"text": "I really don't know what's going on with my account, things feel off lately", "expected_category": "other"}
+]

@@ -174,3 +174,41 @@ Visit `http://localhost:8000/docs`, click the green **Authorize** button, paste 
 
 ![Swagger UI with bearer auth](swagger-auth-screenshot.png)
 
+## AI Triage Endpoint
+
+**What it does:** Takes a customer support message and classifies it so it lands on the 
+right team — returning a category (billing/bug/feature/other), an urgency level, a 
+confidence score, and a one-sentence reason. Built on top of the same Task API from earlier 
+assignments.
+
+**Try it:**
+```bash
+curl -i -X POST http://localhost:8000/triage -H "Content-Type: application/json" -d '{"text": "I was charged twice this month, please refund me"}'
+```
+
+Response:
+```json
+{"category":"billing","urgency":"high","confidence":0.95,"reason":"Clear duplicate billing charge requiring urgent refund"}
+```
+
+**Job card:** see [JOB-CARD.md](JOB-CARD.md) for the full input/output spec and the "must 
+never" rules.
+
+**Provider:** OpenRouter (free tier), model `openrouter/free`. Env vars needed: 
+`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` — see `.env.example`.
+
+**Eval result:** 8/8 on the hand-labelled test set (`evals/cases.json`), prompt version v1, 
+run on 2026-09-21.
+
+**Cost per call (sample):** ~365 input tokens, ~247 output tokens, ~2.5 seconds. Free tier, 
+$0 per call. Estimated cost at 10,000 requests/day would depend on the paid model chosen if 
+scaling beyond the free tier — this stayed on the free plan throughout.
+
+**Stub mode:** set `LLM_STUB=1` to get a schema-valid response with zero model calls — useful 
+for testing without spending quota.
+
+**Kill switch:** set `LLM_ENABLED=false` to disable the model entirely and return a safe 
+fallback response.
+
+**What I'd fix with another day:** add a second prompt version (v2) and compare eval scores, 
+and expand the test set from 8 to 25 cases split into easy/hard buckets for a more meaningful 
