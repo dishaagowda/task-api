@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -7,6 +8,7 @@ import os
 load_dotenv()
 
 app = FastAPI()
+security = HTTPBearer()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -72,10 +74,8 @@ def public_info():
     return {"message": "Welcome stranger! This info is public."}
 
 
-def verify_token(authorization: str = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Access token required")
-    token = authorization.split(" ")[1]
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
     try:
         user_response = supabase.auth.get_user(token)
         return user_response.user, token
