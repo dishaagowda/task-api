@@ -86,3 +86,43 @@ SELECT * FROM tasks;
 
 **Database viewer screenshot:**
 ![Database screenshot](db-browser-screenshot.png)
+
+## Containerized Stack (Docker + Postgres)
+
+**Run the whole stack with one command:**
+```bash
+docker compose up
+```
+This builds the app image, starts Postgres in a container with a persistent volume, 
+and starts the API — connected to each other automatically.
+
+**Environment variables:** copy `.env.example` to `.env` and fill in real values:
+```bash
+cp .env.example .env
+```
+
+**Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /tasks | List all tasks |
+| GET | /tasks/{id} | Get one task |
+| POST | /tasks | Create a task |
+| PUT | /tasks/{id} | Update a task |
+| DELETE | /tasks/{id} | Delete a task |
+
+**Example request:**
+```bash
+curl -i http://localhost:8000/tasks
+```
+
+Response:
+HTTP/1.1 200 OK
+content-type: application/json
+[{"id":1,"title":"Buy groceries","done":false}, ...]
+
+
+**Persistence proof:** created a task, ran `docker compose down` then `docker compose up` again — the task was still present, confirming the named volume (`taskdata`) preserves data across a full stack restart.
+
+**Database screenshot:**
+![Postgres data](postgres-screenshot.png)
