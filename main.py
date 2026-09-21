@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from enum import Enum
 import os
 
 load_dotenv()
@@ -28,7 +29,7 @@ def root():
     return {
         "name": "Task API",
         "version": "2.0",
-        "endpoints": ["/tasks", "/auth/signup", "/auth/login", "/auth/logout", "/protected/profile", "/public/info"]
+        "endpoints": ["/tasks", "/auth/signup", "/auth/login", "/auth/logout", "/protected/profile", "/public/info", "/triage"]
     }
 
 
@@ -69,6 +70,7 @@ def login(auth: AuthRequest):
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid login credentials")
 
+
 @app.get("/public/info")
 def public_info():
     return {"message": "Welcome stranger! This info is public."}
@@ -104,3 +106,47 @@ def logout(auth_data=Depends(verify_token)):
     user, token = auth_data
     supabase.auth.sign_out()
     return
+
+
+# ---------- TRIAGE (LLM) ROUTE ----------
+
+class TriageRequest(BaseModel):
+    text: str
+
+
+class Category(str, Enum):
+    billing = "billing"
+    bug = "bug"
+    feature = "feature"
+    other = "other"
+
+
+class Urgency(str, Enum):
+    low = "low"
+    normal = "normal"
+    high = "high"
+
+
+class TriageResponse(BaseModel):
+    category: Category
+    urgency: Urgency
+    confidence: float
+    reason: str
+
+
+@app.post("/triage", response_model=TriageResponse)
+def triage(request: TriageRequest):
+    if not request.text or not request.text.strip():
+        raise HTTPException(status_code=400, detail="Field 'text' is required and cannot be empty")
+    if len(request.text) > 2000:
+        raise HTTPException(status_code=400, detail="Field 'text' must be 2000 characters or fewer")
+
+    if os.getenv("LLM_STUB") == "1":
+        return TriageResponse(
+            category=Category.other,
+            urgency=Urgency.low,
+            confidence=0.5,
+            reason="Stub mode — no model called"
+        )
+
+    raise HTTPException(status_code=501, detail="Model call not implemented yet")
