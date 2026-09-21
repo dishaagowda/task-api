@@ -4,10 +4,12 @@ from pydantic import BaseModel, ValidationError
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from openai import OpenAI
+import openai as openai_module
 from enum import Enum
 import os
 import json
 import re
+import time
 import datetime
 
 load_dotenv()
@@ -141,6 +143,7 @@ class TriageResponse(BaseModel):
 llm_client = OpenAI(
     base_url=os.getenv("LLM_BASE_URL"),
     api_key=os.getenv("LLM_API_KEY"),
+    timeout=30.0,
 )
 
 with open("prompts/triage-v1.md", "r") as f:
@@ -161,13 +164,57 @@ def extract_json(raw_text):
     return json.loads(text)
 
 
-def call_model(messages):
-    response = llm_client.chat.completions.create(
-        model=os.getenv("LLM_MODEL"),
-        temperature=0.2,
-        messages=messages
-    )
-    return response.choices[0].message.content
+def call_model(messages, prompt_version="v1"):
+    max_retries = 2
+    attempt = 0
+    delay = 1
+
+    while attempt <= max_retries:
+        start = time.time()
+        try:
+            response = llm_client.chat.completions.create(
+                model=os.getenv("LLM_MODEL"),
+                temperature=0.2,
+                messages=messages
+            )
+            duration_ms = round((time.time() - start) * 1000)
+
+            usage = response.usage
+            cost_log = {
+                "prompt_version": prompt_version,
+                "model": os.getenv("LLM_MODEL"),
+                "input_tokens": usage.prompt_tokens if usage else None,
+                "output_tokens": usage.completion_tokens if usage else None,
+                "duration_ms": duration_ms,
+                "attempt": attempt + 1
+            }
+            print("COST LOG:", json.dumps(cost_log))
+
+            return response.choices[0].message.content
+
+        except openai_module.APITimeoutError:
+            attempt += 1
+            if attempt > max_retries:
+                raise
+            time.sleep(delay)
+            delay *= 2
+
+        except openai_module.RateLimitError:
+            attempt += 1
+            if attempt > max_retries:
+                raise
+            time.sleep(delay)
+            delay *= 2
+
+        except openai_module.APIStatusError as e:
+            if 500 <= e.status_code < 600:
+                attempt += 1
+                if attempt > max_retries:
+                    raise
+                time.sleep(delay)
+                delay *= 2
+            else:
+                raise
 
 
 def quarantine(input_text, raw_output, error, prompt_version="v1"):
@@ -197,12 +244,23 @@ def triage(request: TriageRequest):
             reason="Stub mode — no model called"
         )
 
+    if os.getenv("LLM_ENABLED", "true").lower() == "false":
+        return TriageResponse(
+            category=Category.other,
+            urgency=Urgency.low,
+            confidence=0.0,
+            reason="LLM disabled — kill switch active, returning safe fallback"
+        )
+
     messages = [
         {"role": "system", "content": TRIAGE_PROMPT},
         {"role": "user", "content": request.text}
     ]
 
-    raw_text = call_model(messages)
+    try:
+        raw_text = call_model(messages)
+    except openai_module.APITimeoutError:
+        raise HTTPException(status_code=504, detail="Model call timed out")
 
     try:
         data = extract_json(raw_text)
