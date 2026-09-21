@@ -60,3 +60,29 @@ Full CRUD tested and working via Swagger UI's "Try it out" feature:
 ## Notes
 
 Data is stored in memory only — it resets every time the server restarts. A real database will be added in a future stage.
+
+## Database (SQLite)
+
+**Why SQLite:** SQLite was chosen because it requires no separate 
+database server — it's a single file (`tasks.db`) that gets created 
+automatically the first time the app runs. This made it the simplest 
+way to add real persistence without adding deployment complexity.
+
+**Where the database file is stored:** `tasks.db`, in the project root 
+folder. It's excluded from git via `.gitignore` so the database itself 
+never gets committed — only the code that creates and manages it.
+
+**How to start the project:**
+```bash
+uvicorn main:app --reload
+```
+The database and `tasks` table are created automatically on first run, 
+with 3 example tasks inserted if the table is empty.
+
+**Example SQL query:**
+```sql
+SELECT * FROM tasks;
+```
+
+**Database viewer screenshot:**
+![Database screenshot](db-browser-screenshot.png)
