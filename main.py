@@ -134,6 +134,17 @@ class TriageResponse(BaseModel):
     reason: str
 
 
+from openai import OpenAI
+
+llm_client = OpenAI(
+    base_url=os.getenv("LLM_BASE_URL"),
+    api_key=os.getenv("LLM_API_KEY"),
+)
+
+with open("prompts/triage-v1.md", "r") as f:
+    TRIAGE_PROMPT = f.read()
+
+
 @app.post("/triage", response_model=TriageResponse)
 def triage(request: TriageRequest):
     if not request.text or not request.text.strip():
@@ -149,4 +160,18 @@ def triage(request: TriageRequest):
             reason="Stub mode — no model called"
         )
 
-    raise HTTPException(status_code=501, detail="Model call not implemented yet")
+    response = llm_client.chat.completions.create(
+        model=os.getenv("LLM_MODEL"),
+        temperature=0.2,
+        messages=[
+            {"role": "system", "content": TRIAGE_PROMPT},
+            {"role": "user", "content": request.text}
+        ]
+    )
+
+    raw_text = response.choices[0].message.content
+    print("RAW MODEL OUTPUT:", raw_text)
+
+    import json
+    data = json.loads(raw_text)
+    return TriageResponse(**data)
