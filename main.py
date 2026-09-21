@@ -1,59 +1,32 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
 from dotenv import load_dotenv
-import psycopg
+from supabase import create_client, Client
 import os
 
 load_dotenv()
 
 app = FastAPI()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+print("Server running and connected to Supabase")
 
 
-def get_connection():
-    return psycopg.connect(DATABASE_URL)
-
-
-def init_db():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tasks (
-            id SERIAL PRIMARY KEY,
-            title TEXT NOT NULL,
-            done BOOLEAN NOT NULL DEFAULT FALSE
-        )
-    """)
-    cursor.execute("SELECT COUNT(*) FROM tasks")
-    count = cursor.fetchone()[0]
-    if count == 0:
-        cursor.executemany(
-            "INSERT INTO tasks (title, done) VALUES (%s, %s)",
-            [
-                ("Buy groceries", False),
-                ("Finish assignment", False),
-                ("Call mom", True),
-            ],
-        )
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-
-init_db()
-
-
-class TaskCreate(BaseModel):
-    title: str
+class AuthRequest(BaseModel):
+    email: str
+    password: str
 
 
 @app.get("/")
 def root():
     return {
         "name": "Task API",
-        "version": "1.0",
-        "endpoints": ["/tasks"]
+        "version": "2.0",
+        "endpoints": ["/tasks", "/auth/signup", "/auth/login", "/auth/logout", "/protected/profile", "/public/info"]
     }
 
 
@@ -62,80 +35,34 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/tasks")
-def get_tasks():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, title, done FROM tasks")
-    rows = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return [{"id": r[0], "title": r[1], "done": r[2]} for r in rows]
+# ---------- AUTH ROUTES ----------
+
+@app.post("/auth/signup", status_code=201)
+def signup(auth: AuthRequest):
+    if not auth.email or not auth.password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+    try:
+        result = supabase.auth.sign_up({
+            "email": auth.email,
+            "password": auth.password
+        })
+        return {"user": result.user}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/tasks/{task_id}")
-def get_task(task_id: int):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, title, done FROM tasks WHERE id = %s", (task_id,))
-    row = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-    return {"id": row[0], "title": row[1], "done": row[2]}
-
-
-@app.post("/tasks", status_code=201)
-def create_task(task: TaskCreate):
-    if not task.title.strip():
-        raise HTTPException(status_code=400, detail="Title cannot be empty")
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO tasks (title, done) VALUES (%s, %s) RETURNING id, title, done",
-        (task.title, False),
-    )
-    row = cursor.fetchone()
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return {"id": row[0], "title": row[1], "done": row[2]}
-
-
-@app.put("/tasks/{task_id}")
-def update_task(task_id: int, task: TaskCreate):
-    if not task.title.strip():
-        raise HTTPException(status_code=400, detail="Title cannot be empty")
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM tasks WHERE id = %s", (task_id,))
-    if cursor.fetchone() is None:
-        cursor.close()
-        conn.close()
-        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-    cursor.execute(
-        "UPDATE tasks SET title = %s WHERE id = %s RETURNING id, title, done",
-        (task.title, task_id),
-    )
-    row = cursor.fetchone()
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return {"id": row[0], "title": row[1], "done": row[2]}
-
-
-@app.delete("/tasks/{task_id}", status_code=204)
-def delete_task(task_id: int):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM tasks WHERE id = %s", (task_id,))
-    if cursor.fetchone() is None:
-        cursor.close()
-        conn.close()
-        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-    cursor.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return
+@app.post("/auth/login")
+def login(auth: AuthRequest):
+    if not auth.email or not auth.password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+    try:
+        result = supabase.auth.sign_in_with_password({
+            "email": auth.email,
+            "password": auth.password
+        })
+        return {
+            "access_token": result.session.access_token,
+            "refresh_token": result.session.refresh_token
+        }
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid login credentials")
